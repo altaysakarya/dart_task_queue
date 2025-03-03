@@ -9,8 +9,7 @@ jobs:
   publish:
     permissions:
       id-token: write
-    with:
-      environment: pub.dev
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
