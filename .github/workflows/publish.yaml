@@ -6,11 +6,8 @@ on:
       - 'v[0-9]+\.[0-9]+\.[0-9]+'
 
 jobs:
-  publish:
-    environment: pub.dev
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v3
 
@@ -25,6 +22,12 @@ jobs:
 
       - name: Run tests
         run: flutter test
-
-      - name: Publish package
-        run: flutter pub publish --force
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    needs:
+      - test
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      environment: pub.dev
