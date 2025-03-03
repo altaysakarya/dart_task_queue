@@ -1,7 +1,9 @@
 name: dart_task_queue
 description: "A powerful and flexible task queue implementation for Dart applications"
 version: 1.0.0
-homepage:
+repository:
+  type: git
+  url: https://github.com/altaysakarya/dart_task_queue
 
 environment:
   sdk: ^3.6.1
