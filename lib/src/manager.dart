@@ -17,6 +17,25 @@ abstract class TaskQueue {
   /// Timeout duration (in seconds) for each task execution.
   int timeout = 30;
 
+  Function() get _noop => () {};
+  Function(Task) get _noopt => (_) {};
+
+  /// Callback triggered when the task queue starts processing tasks.
+  /// Default is a no-op function.
+  Function() get onTaskQueueStarted => _noop;
+
+  /// Callback triggered when the task queue finishes processing all tasks.
+  /// Default is a no-op function.
+  Function() get onTaskQueueEnded => _noop;
+
+  /// Callback triggered when an individual task starts execution.
+  /// Default is a no-op function that takes a Task parameter.
+  Function(Task) get onPerTaskStarted => _noopt;
+
+  /// Callback triggered when an individual task completes execution.
+  /// Default is a no-op function that takes a Task parameter.
+  Function(Task) get onPerTaskEnded => _noopt;
+
   /// Remove all pending tasks and clears the queue.
   void dispose() {
     for (final task in _tasks) {
@@ -57,20 +76,23 @@ abstract class TaskQueue {
   /// Each task is executed with a timeout defined by [timeout].
   Future<void> _run() async {
     if (_isRunning) return;
-
+    onTaskQueueStarted.call();
     _isRunning = true;
     while (_tasks.isNotEmpty) {
       final task = _tasks.removeFirst();
       if (task.state != TaskState.pending) continue;
 
       task.state = TaskState.running;
+      onPerTaskStarted.call(task);
       try {
         await task.task().timeout(Duration(seconds: timeout));
         task.state = TaskState.completed;
       } catch (_) {
         task.state = TaskState.failed;
       }
+      onPerTaskEnded.call(task);
     }
+    onTaskQueueEnded.call();
     _isRunning = false;
   }
 }
