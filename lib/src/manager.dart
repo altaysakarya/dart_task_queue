@@ -39,6 +39,10 @@ abstract class TaskQueue {
   /// Remove all pending tasks and clears the queue.
   void dispose() {
     for (final task in _tasks) {
+      if (task.state == TaskState.running) {
+        task.completer
+            .completeError(Exception("Task queue disposed before completion"));
+      }
       task.state = TaskState.failed;
     }
     _tasks.clear();
@@ -53,12 +57,14 @@ abstract class TaskQueue {
   ///
   /// Throws an [Exception] if the queue has reached its maximum capacity.
   /// Starts processing tasks if not already running.
-  Task addTask(Future<dynamic> Function() task) {
+  Task<T> addTask<T>(Future<T> Function() task, {Function(T)? onCompleted}) {
     if (_tasks.length >= maxQueueLength) {
       throw Exception("Task queue is full");
     }
-    final taskObject =
-        Task("${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}", task);
+    final taskObject = Task(
+        "${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}",
+        task,
+        onCompleted);
     _tasks.add(taskObject);
 
     if (!_isRunning) {
@@ -69,6 +75,7 @@ abstract class TaskQueue {
 
   /// Remove a specific [task] if it is still pending in the queue.
   void removeTask(Task task) {
+    if (task.state == TaskState.running) return;
     _tasks.remove(task);
   }
 
@@ -85,10 +92,13 @@ abstract class TaskQueue {
       task.state = TaskState.running;
       onPerTaskStarted.call(task);
       try {
-        await task.task().timeout(Duration(seconds: timeout));
+        dynamic p = await task.task().timeout(Duration(seconds: timeout));
         task.state = TaskState.completed;
-      } catch (_) {
+        task.onCompleted?.call(p);
+        task.completer.complete(p);
+      } catch (e, stackTrace) {
         task.state = TaskState.failed;
+        task.completer.completeError(e, stackTrace);
       }
       onPerTaskEnded.call(task);
     }
@@ -137,22 +147,18 @@ class TaskQueueManager {
 
   /// Returns an existing TaskQueue of type [S] or creates one using [taskQueueFactory].
   S getOrCreate<S extends TaskQueue>(S taskQueueFactory) {
-    try {
-      return get<S>();
-    } catch (_) {
-      return create(taskQueueFactory);
-    }
+    return isRegistered<S>() ? get<S>() : create(taskQueueFactory);
   }
 
   /// Deletes a registered TaskQueue of type [S] and disposes its resources.
   void delete<S extends TaskQueue>() {
-    _taskQueues.removeWhere((queue) {
-      if (queue is S) {
-        queue.dispose();
-        return true;
+    for (var i = 0; i < _taskQueues.length; i++) {
+      if (_taskQueues[i] is S) {
+        _taskQueues[i].dispose();
+        _taskQueues.removeAt(i);
+        break;
       }
-      return false;
-    });
+    }
   }
 
   /// Deletes all registered TaskQueues and disposes their resources.
