@@ -3,40 +3,21 @@ import 'dart:collection' as collection;
 
 import 'package:dart_task_queue/src/task.dart';
 
-/// Abstract class for managing a queue of asynchronous tasks.
 abstract class TaskQueue {
-  // Internal queue to hold tasks.
-  final collection.Queue<Task> _tasks = collection.Queue<Task>();
-
-  // Indicates if the queue is currently processing tasks.
+  final collection.Queue<Task<dynamic>> _tasks =
+      collection.Queue<Task<dynamic>>();
   bool _isRunning = false;
-
-  /// Maximum number of tasks allowed in the queue.
   int maxQueueLength = 10;
-
-  /// Timeout duration (in seconds) for each task execution.
   int timeout = 30;
 
   Function() get _noop => () {};
   Function(Task) get _noopt => (_) {};
 
-  /// Callback triggered when the task queue starts processing tasks.
-  /// Default is a no-op function.
   Function() get onTaskQueueStarted => _noop;
-
-  /// Callback triggered when the task queue finishes processing all tasks.
-  /// Default is a no-op function.
   Function() get onTaskQueueEnded => _noop;
-
-  /// Callback triggered when an individual task starts execution.
-  /// Default is a no-op function that takes a Task parameter.
   Function(Task) get onPerTaskStarted => _noopt;
-
-  /// Callback triggered when an individual task completes execution.
-  /// Default is a no-op function that takes a Task parameter.
   Function(Task) get onPerTaskEnded => _noopt;
 
-  /// Remove all pending tasks and clears the queue.
   void dispose() {
     for (final task in _tasks) {
       if (task.state == TaskState.running) {
@@ -48,23 +29,16 @@ abstract class TaskQueue {
     _tasks.clear();
   }
 
-  /// Checks if a specific [task] is still pending in the queue.
   bool checkTask(Task task) {
     return _tasks.any((t) => t == task);
   }
 
-  /// Adds a new task to the queue.
-  ///
-  /// Throws an [Exception] if the queue has reached its maximum capacity.
-  /// Starts processing tasks if not already running.
-  Task<T> addTask<T>(Future<T> Function() task, {Function(T)? onCompleted}) {
+  Task<T> addTask<T>(Future<T> Function() task) {
     if (_tasks.length >= maxQueueLength) {
       throw Exception("Task queue is full");
     }
-    final taskObject = Task(
-        "${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}",
-        task,
-        onCompleted);
+    final taskObject = Task<T>(
+        "${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}", task);
     _tasks.add(taskObject);
 
     if (!_isRunning) {
@@ -73,14 +47,11 @@ abstract class TaskQueue {
     return taskObject;
   }
 
-  /// Remove a specific [task] if it is still pending in the queue.
   void removeTask(Task task) {
     if (task.state == TaskState.running) return;
     _tasks.remove(task);
   }
 
-  /// Processes tasks sequentially.
-  /// Each task is executed with a timeout defined by [timeout].
   Future<void> _run() async {
     if (_isRunning) return;
     onTaskQueueStarted.call();
@@ -94,7 +65,6 @@ abstract class TaskQueue {
       try {
         dynamic p = await task.task().timeout(Duration(seconds: timeout));
         task.state = TaskState.completed;
-        task.onCompleted?.call(p);
         task.completer.complete(p);
       } catch (e, stackTrace) {
         task.state = TaskState.failed;
@@ -107,24 +77,20 @@ abstract class TaskQueue {
   }
 }
 
-/// Singleton manager for handling TaskQueue instances.
+/// Singleton class for managing TaskQueues.
 class TaskQueueManager {
-  // Private constructor for singleton pattern.
   TaskQueueManager._();
 
-  /// The single instance of TaskQueueManager.
   static final TaskQueueManager instance = TaskQueueManager._();
 
-  /// Internal list holding all registered TaskQueue instances.
   final List<TaskQueue> _taskQueues = [];
 
-  /// Checks if a TaskQueue of type [S] is already registered.
+  /// Checks if a TaskQueue of type [S] is registered.
   bool isRegistered<S extends TaskQueue>() =>
       _taskQueues.any((queue) => queue is S);
 
   /// Creates and registers a new TaskQueue of type [S].
-  ///
-  /// Throws an exception if a TaskQueue of this type already exists.
+  /// Throws [TaskQueueAlreadyExists] if one already exists.
   S create<S extends TaskQueue>(S taskQueue) {
     if (isRegistered<S>()) {
       throw TaskQueueAlreadyExists(
@@ -134,9 +100,8 @@ class TaskQueueManager {
     return taskQueue;
   }
 
-  /// Retrieves a registered TaskQueue of type [S].
-  ///
-  /// Throws an exception if not found.
+  /// Retrieves the registered TaskQueue of type [S].
+  /// Throws [TaskQueueNotFoundException] if not found.
   S get<S extends TaskQueue>() {
     return _taskQueues.firstWhere(
       (queue) => queue is S,
@@ -145,12 +110,13 @@ class TaskQueueManager {
     ) as S;
   }
 
-  /// Returns an existing TaskQueue of type [S] or creates one using [taskQueueFactory].
-  S getOrCreate<S extends TaskQueue>(S taskQueueFactory) {
-    return isRegistered<S>() ? get<S>() : create(taskQueueFactory);
+  /// Returns the TaskQueue of type [S] if it exists,
+  /// otherwise creates one using the provided instance.
+  S getOrCreate<S extends TaskQueue>(S taskQueue) {
+    return isRegistered<S>() ? get<S>() : create(taskQueue);
   }
 
-  /// Deletes a registered TaskQueue of type [S] and disposes its resources.
+  /// Deletes the TaskQueue of type [S] and releases its resources.
   void delete<S extends TaskQueue>() {
     for (var i = 0; i < _taskQueues.length; i++) {
       if (_taskQueues[i] is S) {
@@ -161,7 +127,7 @@ class TaskQueueManager {
     }
   }
 
-  /// Deletes all registered TaskQueues and disposes their resources.
+  /// Deletes all TaskQueues.
   void deleteAll() {
     for (var queue in _taskQueues) {
       queue.dispose();
@@ -174,18 +140,14 @@ TaskQueueManager get Queue => TaskQueueManager.instance;
 
 class TaskQueueAlreadyExists implements Exception {
   final String message;
-
   TaskQueueAlreadyExists(this.message);
-
   @override
   String toString() => message;
 }
 
 class TaskQueueNotFoundException implements Exception {
   final String message;
-
   TaskQueueNotFoundException(this.message);
-
   @override
   String toString() => message;
 }
