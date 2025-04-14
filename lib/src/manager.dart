@@ -33,12 +33,15 @@ abstract class TaskQueue {
     return _tasks.any((t) => t == task);
   }
 
-  Task<T> addTask<T>(Future<T> Function() task) {
+  Task<T> addTask<T>(Future<T> Function() task,
+      {Function(Object, StackTrace)? onError}) {
     if (_tasks.length >= maxQueueLength) {
       throw Exception("Task queue is full");
     }
     final taskObject = Task<T>(
-        "${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}", task);
+        "${task.hashCode ^ DateTime.now().microsecondsSinceEpoch}",
+        task,
+        onError);
     _tasks.add(taskObject);
 
     if (!_isRunning) {
@@ -69,6 +72,7 @@ abstract class TaskQueue {
       } catch (e, stackTrace) {
         task.state = TaskState.failed;
         task.completer.completeError(e, stackTrace);
+        task.onError?.call(e, stackTrace);
       }
       onPerTaskEnded.call(task);
     }

@@ -17,3 +17,7 @@
 ## 1.0.4
 
 * Bug fixes
+
+## 1.0.5
+
+* Added onError option for Task

@@ -6,6 +6,7 @@ class Task<T> {
   final String id;
   final Future<T> Function() task;
   final Completer<T?> completer = Completer<T?>();
+  final Function(Object, StackTrace)? onError;
   Future<T?> get future => completer.future;
 
   TaskState _state;
@@ -21,11 +22,12 @@ class Task<T> {
     }
   }
 
-  final StreamController<TaskState> _stateController = StreamController<TaskState>();
+  final StreamController<TaskState> _stateController =
+      StreamController<TaskState>();
 
   Stream<TaskState> get stateStream => _stateController.stream;
 
-  Task(this.id, this.task) : _state = TaskState.pending;
+  Task(this.id, this.task, this.onError) : _state = TaskState.pending;
 
   @override
   bool operator ==(Object other) {
